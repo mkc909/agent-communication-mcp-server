@@ -2,7 +2,9 @@ import { connect, Connection } from '@planetscale/database';
 import { Agent } from './agent-registry.js';
 import { Message } from './message-bus.js';
 import { Task } from './task-management.js';
-import { SharedContext, AgentContextAccess } from './context-sharing.js';
+import { TaskDependency } from './task-dependencies.js';
+import { TaskReminder } from './task-reminders.js';
+import { SharedContext, AgentContextAccess, ContextVersion, ContextTag, ContextSubscription } from './context-sharing.js';
 
 export class Database {
   private connection: Connection | null = null;
@@ -195,7 +197,7 @@ export class Database {
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create message:', error);
       throw error;
@@ -294,7 +296,7 @@ export class Database {
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create task:', error);
       throw error;
@@ -448,18 +450,24 @@ export class Database {
 
     try {
       const result = await this.connection.execute(
-        `INSERT INTO shared_context (title, content, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO shared_context (
+          title, content, created_by, category, version, is_latest, metadata, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           context.title,
           context.content,
           context.created_by,
+          context.category || null,
+          context.version,
+          context.is_latest,
+          context.metadata ? JSON.stringify(context.metadata) : null,
           context.created_at,
           context.updated_at,
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create context:', error);
       throw error;
@@ -526,6 +534,10 @@ export class Database {
         title: row.title,
         content: row.content,
         created_by: row.created_by,
+        category: row.category,
+        version: row.version,
+        is_latest: Boolean(row.is_latest),
+        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
         created_at: new Date(row.created_at),
         updated_at: new Date(row.updated_at),
       };
@@ -559,11 +571,223 @@ export class Database {
         title: row.title,
         content: row.content,
         created_by: row.created_by,
+        category: row.category,
+        version: row.version,
+        is_latest: Boolean(row.is_latest),
+        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
         created_at: new Date(row.created_at),
         updated_at: new Date(row.updated_at),
       }));
     } catch (error) {
       console.error('Failed to list contexts:', error);
+      throw error;
+    }
+  }
+
+  public async createContextVersion(version: Omit<ContextVersion, 'version_id'>): Promise<number> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `INSERT INTO context_versions (context_id, version_number, content, created_by, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          version.context_id,
+          version.version_number,
+          version.content,
+          version.created_by,
+          version.created_at,
+        ]
+      );
+
+      return Number(result.insertId);
+    } catch (error) {
+      console.error('Failed to create context version:', error);
+      throw error;
+    }
+  }
+
+  public async getContextVersions(contextId: number): Promise<ContextVersion[]> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `SELECT * FROM context_versions
+         WHERE context_id = ?
+         ORDER BY version_number DESC`,
+        [contextId]
+      );
+
+      return result.rows.map((row: any) => ({
+        version_id: row.version_id,
+        context_id: row.context_id,
+        version_number: row.version_number,
+        content: row.content,
+        created_by: row.created_by,
+        created_at: new Date(row.created_at),
+      }));
+    } catch (error) {
+      console.error('Failed to get context versions:', error);
+      throw error;
+    }
+  }
+
+  public async addContextTag(contextId: number, tagName: string): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      // First, get or create the tag
+      let tagId: number;
+      const existingTags = await this.connection.execute(
+        'SELECT tag_id FROM context_tags WHERE name = ?',
+        [tagName]
+      );
+      
+      if (existingTags.rows.length > 0) {
+        tagId = existingTags.rows[0].tag_id;
+      } else {
+        // Create new tag
+        const result = await this.connection.execute(
+          'INSERT INTO context_tags (name) VALUES (?)',
+          [tagName]
+        );
+        tagId = Number(result.insertId);
+      }
+
+      // Now map the tag to the context
+      await this.connection.execute(
+        `INSERT INTO context_tag_mapping (context_id, tag_id)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE context_id = context_id`,
+        [contextId, tagId]
+      );
+    } catch (error) {
+      console.error('Failed to add context tag:', error);
+      throw error;
+    }
+  }
+
+  public async removeContextTag(contextId: number, tagName: string): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      // Get the tag ID
+      const tags = await this.connection.execute(
+        'SELECT tag_id FROM context_tags WHERE name = ?',
+        [tagName]
+      );
+      
+      if (tags.rows.length === 0) {
+        return; // Tag doesn't exist, nothing to remove
+      }
+      
+      const tagId = tags.rows[0].tag_id;
+
+      // Remove the mapping
+      await this.connection.execute(
+        'DELETE FROM context_tag_mapping WHERE context_id = ? AND tag_id = ?',
+        [contextId, tagId]
+      );
+    } catch (error) {
+      console.error('Failed to remove context tag:', error);
+      throw error;
+    }
+  }
+
+  public async getContextTags(contextId: number): Promise<ContextTag[]> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `SELECT t.tag_id, t.name
+         FROM context_tags t
+         JOIN context_tag_mapping m ON t.tag_id = m.tag_id
+         WHERE m.context_id = ?
+         ORDER BY t.name`,
+        [contextId]
+      );
+
+      return result.rows.map((row: any) => ({
+        tag_id: row.tag_id,
+        name: row.name,
+      }));
+    } catch (error) {
+      console.error('Failed to get context tags:', error);
+      throw error;
+    }
+  }
+
+  public async subscribeToContext(subscription: Omit<ContextSubscription, 'subscription_id'>): Promise<number> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `INSERT INTO context_subscriptions (agent_id, context_id, created_at)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE created_at = VALUES(created_at)`,
+        [
+          subscription.agent_id,
+          subscription.context_id,
+          subscription.created_at,
+        ]
+      );
+
+      return Number(result.insertId);
+    } catch (error) {
+      console.error('Failed to subscribe to context:', error);
+      throw error;
+    }
+  }
+
+  public async unsubscribeFromContext(agentId: string, contextId: number): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      await this.connection.execute(
+        `DELETE FROM context_subscriptions
+         WHERE agent_id = ? AND context_id = ?`,
+        [agentId, contextId]
+      );
+    } catch (error) {
+      console.error('Failed to unsubscribe from context:', error);
+      throw error;
+    }
+  }
+
+  public async getContextSubscribers(contextId: number): Promise<{ agent_id: string; created_at: Date }[]> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `SELECT agent_id, created_at
+         FROM context_subscriptions
+         WHERE context_id = ?
+         ORDER BY created_at`,
+        [contextId]
+      );
+
+      return result.rows.map((row: any) => ({
+        agent_id: row.agent_id,
+        created_at: new Date(row.created_at),
+      }));
+    } catch (error) {
+      console.error('Failed to get context subscribers:', error);
       throw error;
     }
   }
