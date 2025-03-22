@@ -12,6 +12,10 @@ export interface SharedContext {
   title: string;
   content: string;
   created_by: string;
+  category?: string;
+  version: number;
+  is_latest: boolean;
+  metadata?: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -20,6 +24,27 @@ export interface AgentContextAccess {
   agent_id: string;
   context_id: number;
   access_level: 'read' | 'write';
+}
+
+export interface ContextVersion {
+  version_id: number;
+  context_id: number;
+  version_number: number;
+  content: string;
+  created_by: string;
+  created_at: Date;
+}
+
+export interface ContextTag {
+  tag_id: number;
+  name: string;
+}
+
+export interface ContextSubscription {
+  subscription_id: number;
+  agent_id: string;
+  context_id: number;
+  created_at: Date;
 }
 
 export class ContextSharing {
