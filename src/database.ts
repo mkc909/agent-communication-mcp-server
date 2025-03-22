@@ -38,8 +38,8 @@ export class Database {
 
     try {
       await this.connection.execute(
-        `INSERT INTO agents (agent_id, name, capabilities, system, status, last_active, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (agent_id, name, capabilities, system, status, last_active, created_at, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           agent.agent_id,
           agent.name,
@@ -48,6 +48,7 @@ export class Database {
           agent.status,
           agent.last_active,
           agent.created_at,
+          agent.metadata ? JSON.stringify(agent.metadata) : null,
         ]
       );
     } catch (error) {
@@ -84,6 +85,11 @@ export class Database {
       if (updates.last_active) {
         updateFields.push('last_active = ?');
         values.push(updates.last_active);
+      }
+
+      if (updates.metadata) {
+        updateFields.push('metadata = ?');
+        values.push(JSON.stringify(updates.metadata));
       }
 
       // Add agent_id at the end for WHERE clause
@@ -183,8 +189,20 @@ export class Database {
 
     try {
       const result = await this.connection.execute(
-        `INSERT INTO messages (from_agent_id, to_agent_id, message, priority, read_status, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (
+          from_agent_id,
+          to_agent_id,
+          message,
+          priority,
+          read_status,
+          timestamp,
+          delivery_status,
+          is_broadcast,
+          expires_at,
+          delivery_timestamp,
+          metadata
+        )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           message.from_agent_id,
           message.to_agent_id,
@@ -192,10 +210,15 @@ export class Database {
           message.priority,
           message.read_status ? 1 : 0,
           message.timestamp,
+          message.delivery_status,
+          message.is_broadcast ? 1 : 0,
+          message.expires_at,
+          message.delivery_timestamp,
+          message.metadata ? JSON.stringify(message.metadata) : null,
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create message:', error);
       throw error;
@@ -233,6 +256,11 @@ export class Database {
         priority: row.priority,
         read_status: Boolean(row.read_status),
         timestamp: new Date(row.timestamp),
+        delivery_status: row.delivery_status || 'pending',
+        is_broadcast: Boolean(row.is_broadcast),
+        expires_at: row.expires_at ? new Date(row.expires_at) : undefined,
+        delivery_timestamp: row.delivery_timestamp ? new Date(row.delivery_timestamp) : undefined,
+        metadata: row.metadata ? JSON.parse(row.metadata) : {},
       }));
     } catch (error) {
       console.error('Failed to get messages:', error);
@@ -272,6 +300,62 @@ export class Database {
     }
   }
 
+  public async getMessage(messageId: number): Promise<Message | null> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        'SELECT * FROM messages WHERE message_id = ?',
+        [messageId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0] as any;
+      return {
+        message_id: row.message_id,
+        from_agent_id: row.from_agent_id,
+        to_agent_id: row.to_agent_id,
+        message: row.message,
+        priority: row.priority,
+        read_status: Boolean(row.read_status),
+        timestamp: new Date(row.timestamp),
+        delivery_status: row.delivery_status || 'pending',
+        is_broadcast: Boolean(row.is_broadcast),
+        expires_at: row.expires_at ? new Date(row.expires_at) : undefined,
+        delivery_timestamp: row.delivery_timestamp ? new Date(row.delivery_timestamp) : undefined,
+        metadata: row.metadata ? JSON.parse(row.metadata) : {},
+      };
+    } catch (error) {
+      console.error('Failed to get message:', error);
+      throw error;
+    }
+  }
+
+  public async updateMessageDeliveryStatus(
+    messageId: number,
+    status: 'pending' | 'delivered' | 'failed',
+    timestamp: Date
+  ): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      await this.connection.execute(
+        'UPDATE messages SET delivery_status = ?, delivery_timestamp = ? WHERE message_id = ?',
+        [status, timestamp, messageId]
+      );
+    } catch (error) {
+      console.error('Failed to update message delivery status:', error);
+      throw error;
+    }
+  }
+
   // Task methods
   public async createTask(task: Omit<Task, 'task_id'>): Promise<number> {
     if (!this.connection) {
@@ -294,7 +378,7 @@ export class Database {
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create task:', error);
       throw error;
@@ -459,7 +543,7 @@ export class Database {
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create context:', error);
       throw error;
