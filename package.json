@@ -28,7 +28,7 @@
   },
   "homepage": "https://github.com/mkc909/agent-communication-mcp-server#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.7.0",
     "@planetscale/database": "^1.11.0",
     "@octokit/rest": "^19.0.13",
     "axios": "^1.6.2",

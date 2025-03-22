@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { Server } from '@modelcontextprotocol/sdk';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
 import dotenv from 'dotenv';
-import { AgentRegistry } from './agent-registry.js';
-import { MessageBus } from './message-bus.js';
-import { TaskManagement } from './task-management.js';
-import { ContextSharing } from './context-sharing.js';
-import { GitHubIntegration } from './github-integration.js';
-import { Database } from './database.js';
+import { AgentRegistry } from './agent-registry';
+import { MessageBus } from './message-bus';
+import { TaskManagement } from './task-management';
+import { ContextSharing } from './context-sharing';
+import { GitHubIntegration } from './github-integration';
+import { Database } from './database';
 
 // Load environment variables
 dotenv.config();
