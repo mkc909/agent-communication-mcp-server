@@ -1,11 +1,11 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { Server } from '@modelcontextprotocol/sdk';
 import {
   CallToolRequestSchema,
   ErrorCode,
   ListToolsRequestSchema,
   McpError,
-} from '@modelcontextprotocol/sdk/types.js';
-import { Database } from './database.js';
+} from '@modelcontextprotocol/sdk';
+import { Database } from './database';
 
 interface AgentCapability {
   name: string;
