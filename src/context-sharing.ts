@@ -12,6 +12,10 @@ export interface SharedContext {
   title: string;
   content: string;
   created_by: string;
+  category?: string;
+  version: number;
+  is_latest: boolean;
+  metadata?: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -20,6 +24,27 @@ export interface AgentContextAccess {
   agent_id: string;
   context_id: number;
   access_level: 'read' | 'write';
+}
+
+export interface ContextVersion {
+  version_id: number;
+  context_id: number;
+  version_number: number;
+  content: string;
+  created_by: string;
+  created_at: Date;
+}
+
+export interface ContextTag {
+  tag_id: number;
+  name: string;
+}
+
+export interface ContextSubscription {
+  subscription_id: number;
+  agent_id: string;
+  context_id: number;
+  created_at: Date;
 }
 
 export class ContextSharing {
@@ -169,6 +194,10 @@ export class ContextSharing {
         title: args.title,
         content: args.content,
         created_by: args.created_by,
+        category: args.category,
+        version: 1,
+        is_latest: true,
+        metadata: args.metadata,
         created_at: now,
         updated_at: now,
       };
@@ -370,13 +399,17 @@ export class ContextSharing {
     title: string;
     content: string;
     created_by: string;
+    category?: string;
+    metadata?: Record<string, unknown>;
   } {
     return (
       typeof args === 'object' &&
       args !== null &&
       typeof args.title === 'string' &&
       typeof args.content === 'string' &&
-      typeof args.created_by === 'string'
+      typeof args.created_by === 'string' &&
+      (args.category === undefined || typeof args.category === 'string') &&
+      (args.metadata === undefined || typeof args.metadata === 'object')
     );
   }
 
