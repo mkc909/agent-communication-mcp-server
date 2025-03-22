@@ -10,6 +10,8 @@ import { Database } from './database.js';
 interface AgentCapability {
   name: string;
   description: string;
+  version?: string;
+  parameters?: Record<string, unknown>;
 }
 
 export interface Agent {
@@ -20,6 +22,7 @@ export interface Agent {
   status: 'active' | 'inactive';
   last_active: Date;
   created_at: Date;
+  metadata?: Record<string, unknown>;
 }
 
 export class AgentRegistry {
@@ -56,6 +59,14 @@ export class AgentRegistry {
                       type: 'string',
                       description: 'Description of the capability',
                     },
+                    version: {
+                      type: 'string',
+                      description: 'Version of the capability',
+                    },
+                    parameters: {
+                      type: 'object',
+                      description: 'Additional parameters for the capability',
+                    },
                   },
                   required: ['name', 'description'],
                 },
@@ -64,6 +75,10 @@ export class AgentRegistry {
               system: {
                 type: 'string',
                 description: 'System identifier where the agent is running',
+              },
+              metadata: {
+                type: 'object',
+                description: 'Additional metadata for the agent',
               },
             },
             required: ['agent_id', 'name', 'capabilities', 'system'],
@@ -96,6 +111,14 @@ export class AgentRegistry {
                       type: 'string',
                       description: 'Description of the capability',
                     },
+                    version: {
+                      type: 'string',
+                      description: 'Version of the capability',
+                    },
+                    parameters: {
+                      type: 'object',
+                      description: 'Additional parameters for the capability',
+                    },
                   },
                   required: ['name', 'description'],
                 },
@@ -105,6 +128,10 @@ export class AgentRegistry {
                 type: 'string',
                 enum: ['active', 'inactive'],
                 description: 'Agent status',
+              },
+              metadata: {
+                type: 'object',
+                description: 'Additional metadata for the agent',
               },
             },
             required: ['agent_id'],

@@ -6,7 +6,8 @@ CREATE TABLE agents (
   system VARCHAR(255) NOT NULL,
   status ENUM('active', 'inactive') DEFAULT 'active',
   last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  metadata JSON NULL
 );
 
 -- Messages table
@@ -18,6 +19,11 @@ CREATE TABLE messages (
   priority ENUM('low', 'medium', 'high') DEFAULT 'medium',
   read_status BOOLEAN DEFAULT FALSE,
   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  delivery_status ENUM('pending', 'delivered', 'failed') DEFAULT 'pending',
+  is_broadcast BOOLEAN DEFAULT FALSE,
+  expires_at TIMESTAMP NULL,
+  delivery_timestamp TIMESTAMP NULL,
+  metadata JSON NULL,
   FOREIGN KEY (from_agent_id) REFERENCES agents(agent_id),
   FOREIGN KEY (to_agent_id) REFERENCES agents(agent_id)
 );
