@@ -2,6 +2,8 @@ import { connect, Connection } from '@planetscale/database';
 import { Agent } from './agent-registry.js';
 import { Message } from './message-bus.js';
 import { Task } from './task-management.js';
+import { TaskDependency } from './task-dependencies.js';
+import { TaskReminder } from './task-reminders.js';
 import { SharedContext, AgentContextAccess } from './context-sharing.js';
 
 export class Database {
@@ -195,7 +197,7 @@ export class Database {
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create message:', error);
       throw error;
@@ -294,7 +296,7 @@ export class Database {
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create task:', error);
       throw error;
@@ -378,9 +380,12 @@ export class Database {
         title: row.title,
         description: row.description,
         status: row.status,
+        priority: row.priority || 'medium',
         assigned_to: row.assigned_to,
         created_by: row.created_by,
         github_issue_id: row.github_issue_id,
+        deadline: row.deadline ? new Date(row.deadline) : null,
+        metadata: row.metadata ? JSON.parse(row.metadata) : null,
         created_at: new Date(row.created_at),
         updated_at: new Date(row.updated_at),
       };
@@ -390,7 +395,12 @@ export class Database {
     }
   }
 
-  public async listTasks(assignedTo?: string, status?: string, limit?: number): Promise<Task[]> {
+  public async listTasks(
+    assignedTo?: string,
+    status?: string,
+    priority?: string,
+    limit?: number
+  ): Promise<Task[]> {
     if (!this.connection) {
       throw new Error('Database not initialized');
     }
@@ -410,11 +420,16 @@ export class Database {
         values.push(status);
       }
 
+      if (priority) {
+        conditions.push('priority = ?');
+        values.push(priority);
+      }
+
       if (conditions.length > 0) {
         query += ' WHERE ' + conditions.join(' AND ');
       }
 
-      query += ' ORDER BY updated_at DESC';
+      query += ' ORDER BY priority DESC, updated_at DESC';
 
       if (limit) {
         query += ' LIMIT ?';
@@ -428,14 +443,246 @@ export class Database {
         title: row.title,
         description: row.description,
         status: row.status,
+        priority: row.priority || 'medium',
         assigned_to: row.assigned_to,
         created_by: row.created_by,
         github_issue_id: row.github_issue_id,
+        deadline: row.deadline ? new Date(row.deadline) : null,
+        metadata: row.metadata ? JSON.parse(row.metadata) : null,
         created_at: new Date(row.created_at),
         updated_at: new Date(row.updated_at),
       }));
     } catch (error) {
       console.error('Failed to list tasks:', error);
+      throw error;
+    }
+  }
+
+  // Task Dependency methods
+  public async createTaskDependency(dependency: Omit<TaskDependency, 'dependency_id'>): Promise<number> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `INSERT INTO task_dependencies (task_id, depends_on_task_id, created_at)
+         VALUES (?, ?, ?)`,
+        [
+          dependency.task_id,
+          dependency.depends_on_task_id,
+          dependency.created_at,
+        ]
+      );
+
+      return Number(result.insertId);
+    } catch (error) {
+      console.error('Failed to create task dependency:', error);
+      throw error;
+    }
+  }
+
+  public async getTaskDependency(taskId: number, dependsOnTaskId: number): Promise<TaskDependency | null> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `SELECT * FROM task_dependencies
+         WHERE task_id = ? AND depends_on_task_id = ?`,
+        [taskId, dependsOnTaskId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0] as any;
+      return {
+        dependency_id: row.dependency_id,
+        task_id: row.task_id,
+        depends_on_task_id: row.depends_on_task_id,
+        created_at: new Date(row.created_at),
+      };
+    } catch (error) {
+      console.error('Failed to get task dependency:', error);
+      throw error;
+    }
+  }
+
+  public async deleteTaskDependency(taskId: number, dependsOnTaskId: number): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      await this.connection.execute(
+        `DELETE FROM task_dependencies
+         WHERE task_id = ? AND depends_on_task_id = ?`,
+        [taskId, dependsOnTaskId]
+      );
+    } catch (error) {
+      console.error('Failed to delete task dependency:', error);
+      throw error;
+    }
+  }
+
+  public async getTaskDependencies(taskId: number): Promise<TaskDependency[]> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `SELECT * FROM task_dependencies WHERE task_id = ?`,
+        [taskId]
+      );
+
+      return result.rows.map((row: any) => ({
+        dependency_id: row.dependency_id,
+        task_id: row.task_id,
+        depends_on_task_id: row.depends_on_task_id,
+        created_at: new Date(row.created_at),
+      }));
+    } catch (error) {
+      console.error('Failed to get task dependencies:', error);
+      throw error;
+    }
+  }
+
+  public async getTaskDependents(taskId: number): Promise<TaskDependency[]> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `SELECT * FROM task_dependencies WHERE depends_on_task_id = ?`,
+        [taskId]
+      );
+
+      return result.rows.map((row: any) => ({
+        dependency_id: row.dependency_id,
+        task_id: row.task_id,
+        depends_on_task_id: row.depends_on_task_id,
+        created_at: new Date(row.created_at),
+      }));
+    } catch (error) {
+      console.error('Failed to get task dependents:', error);
+      throw error;
+    }
+  }
+
+  // Task Reminder methods
+  public async createTaskReminder(reminder: Omit<TaskReminder, 'reminder_id'>): Promise<number> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `INSERT INTO task_reminders (task_id, reminder_time, message, sent, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          reminder.task_id,
+          reminder.reminder_time,
+          reminder.message,
+          reminder.sent ? 1 : 0,
+          reminder.created_at,
+        ]
+      );
+
+      return Number(result.insertId);
+    } catch (error) {
+      console.error('Failed to create task reminder:', error);
+      throw error;
+    }
+  }
+
+  public async getTaskReminderById(reminderId: number): Promise<TaskReminder | null> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `SELECT * FROM task_reminders WHERE reminder_id = ?`,
+        [reminderId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0] as any;
+      return {
+        reminder_id: row.reminder_id,
+        task_id: row.task_id,
+        reminder_time: new Date(row.reminder_time),
+        message: row.message,
+        sent: Boolean(row.sent),
+        created_at: new Date(row.created_at),
+      };
+    } catch (error) {
+      console.error('Failed to get task reminder:', error);
+      throw error;
+    }
+  }
+
+  public async getTaskReminders(taskId: number): Promise<TaskReminder[]> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = await this.connection.execute(
+        `SELECT * FROM task_reminders WHERE task_id = ? ORDER BY reminder_time ASC`,
+        [taskId]
+      );
+
+      return result.rows.map((row: any) => ({
+        reminder_id: row.reminder_id,
+        task_id: row.task_id,
+        reminder_time: new Date(row.reminder_time),
+        message: row.message,
+        sent: Boolean(row.sent),
+        created_at: new Date(row.created_at),
+      }));
+    } catch (error) {
+      console.error('Failed to get task reminders:', error);
+      throw error;
+    }
+  }
+
+  public async deleteTaskReminder(reminderId: number): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      await this.connection.execute(
+        `DELETE FROM task_reminders WHERE reminder_id = ?`,
+        [reminderId]
+      );
+    } catch (error) {
+      console.error('Failed to delete task reminder:', error);
+      throw error;
+    }
+  }
+
+  public async updateTaskReminderStatus(reminderId: number, sent: boolean): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      await this.connection.execute(
+        `UPDATE task_reminders SET sent = ? WHERE reminder_id = ?`,
+        [sent ? 1 : 0, reminderId]
+      );
+    } catch (error) {
+      console.error('Failed to update task reminder status:', error);
       throw error;
     }
   }
@@ -459,7 +706,7 @@ export class Database {
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create context:', error);
       throw error;

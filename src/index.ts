@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import { AgentRegistry } from './agent-registry.js';
 import { MessageBus } from './message-bus.js';
 import { TaskManagement } from './task-management.js';
+import { TaskDependencyManager } from './task-dependencies.js';
+import { TaskReminderManager } from './task-reminders.js';
 import { ContextSharing } from './context-sharing.js';
 import { GitHubIntegration } from './github-integration.js';
 import { Database } from './database.js';
@@ -17,6 +19,8 @@ class AgentCommunicationServer {
   private agentRegistry: AgentRegistry;
   private messageBus: MessageBus;
   private taskManagement: TaskManagement;
+  private taskDependencyManager: TaskDependencyManager;
+  private taskReminderManager: TaskReminderManager;
   private contextSharing: ContextSharing;
   private githubIntegration: GitHubIntegration;
   private database: Database;
@@ -29,6 +33,8 @@ class AgentCommunicationServer {
     this.agentRegistry = new AgentRegistry(this.database);
     this.messageBus = new MessageBus(this.database);
     this.taskManagement = new TaskManagement(this.database);
+    this.taskDependencyManager = new TaskDependencyManager(this.database);
+    this.taskReminderManager = new TaskReminderManager(this.database);
     this.contextSharing = new ContextSharing(this.database);
     this.githubIntegration = new GitHubIntegration();
 
@@ -62,6 +68,8 @@ class AgentCommunicationServer {
     this.agentRegistry.registerHandlers(this.server);
     this.messageBus.registerHandlers(this.server);
     this.taskManagement.registerHandlers(this.server);
+    this.taskDependencyManager.registerHandlers(this.server);
+    this.taskReminderManager.registerHandlers(this.server);
     this.contextSharing.registerHandlers(this.server);
     this.githubIntegration.registerHandlers(this.server);
   }

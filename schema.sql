@@ -28,13 +28,38 @@ CREATE TABLE tasks (
   title VARCHAR(255) NOT NULL,
   description TEXT,
   status ENUM('pending', 'assigned', 'in_progress', 'completed', 'failed') DEFAULT 'pending',
+  priority ENUM('low', 'medium', 'high', 'critical') DEFAULT 'medium',
   assigned_to VARCHAR(255),
   created_by VARCHAR(255) NOT NULL,
   github_issue_id INT,
+  deadline TIMESTAMP NULL,
+  metadata JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (assigned_to) REFERENCES agents(agent_id),
   FOREIGN KEY (created_by) REFERENCES agents(agent_id)
+);
+
+-- Task dependencies table
+CREATE TABLE task_dependencies (
+  dependency_id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL,
+  depends_on_task_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE CASCADE,
+  FOREIGN KEY (depends_on_task_id) REFERENCES tasks(task_id) ON DELETE CASCADE,
+  UNIQUE KEY unique_dependency (task_id, depends_on_task_id)
+);
+
+-- Task reminders table
+CREATE TABLE task_reminders (
+  reminder_id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL,
+  reminder_time TIMESTAMP NOT NULL,
+  message TEXT NOT NULL,
+  sent BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
 );
 
 -- Shared context table

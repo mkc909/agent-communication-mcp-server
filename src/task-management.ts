@@ -12,9 +12,12 @@ export interface Task {
   title: string;
   description: string | null;
   status: 'pending' | 'assigned' | 'in_progress' | 'completed' | 'failed';
+  priority: 'low' | 'medium' | 'high' | 'critical';
   assigned_to: string | null;
   created_by: string;
   github_issue_id: number | null;
+  deadline: Date | null;
+  metadata: Record<string, unknown> | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -40,6 +43,11 @@ export class TaskManagement {
                 type: 'string',
                 description: 'Task description',
               },
+              priority: {
+                type: 'string',
+                enum: ['low', 'medium', 'high', 'critical'],
+                description: 'Task priority level',
+              },
               created_by: {
                 type: 'string',
                 description: 'Agent ID of task creator',
@@ -47,6 +55,15 @@ export class TaskManagement {
               github_issue_id: {
                 type: 'number',
                 description: 'Associated GitHub issue ID (optional)',
+              },
+              deadline: {
+                type: 'string',
+                format: 'date-time',
+                description: 'Task deadline (ISO 8601 format)',
+              },
+              metadata: {
+                type: 'object',
+                description: 'Additional metadata for the task',
               },
             },
             required: ['title', 'created_by'],
@@ -175,9 +192,12 @@ export class TaskManagement {
         title: args.title,
         description: args.description || null,
         status: 'pending' as const,
+        priority: args.priority || 'medium',
         assigned_to: null,
         created_by: args.created_by,
         github_issue_id: args.github_issue_id || null,
+        deadline: args.deadline ? new Date(args.deadline) : null,
+        metadata: args.metadata || null,
         created_at: now,
         updated_at: now,
       };
@@ -384,8 +404,11 @@ export class TaskManagement {
   private isValidCreateTaskArgs(args: any): args is {
     title: string;
     description?: string;
+    priority?: 'low' | 'medium' | 'high' | 'critical';
     created_by: string;
     github_issue_id?: number;
+    deadline?: string | Date;
+    metadata?: Record<string, unknown>;
   } {
     return (
       typeof args === 'object' &&
@@ -393,7 +416,14 @@ export class TaskManagement {
       typeof args.title === 'string' &&
       typeof args.created_by === 'string' &&
       (args.description === undefined || typeof args.description === 'string') &&
-      (args.github_issue_id === undefined || typeof args.github_issue_id === 'number')
+      (args.priority === undefined ||
+        (typeof args.priority === 'string' &&
+         ['low', 'medium', 'high', 'critical'].includes(args.priority))) &&
+      (args.github_issue_id === undefined || typeof args.github_issue_id === 'number') &&
+      (args.deadline === undefined ||
+        typeof args.deadline === 'string' ||
+        args.deadline instanceof Date) &&
+      (args.metadata === undefined || typeof args.metadata === 'object')
     );
   }
 
