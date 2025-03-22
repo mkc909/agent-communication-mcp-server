@@ -6,7 +6,8 @@ CREATE TABLE agents (
   system VARCHAR(255) NOT NULL,
   status ENUM('active', 'inactive') DEFAULT 'active',
   last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  metadata JSON
 );
 
 -- Messages table

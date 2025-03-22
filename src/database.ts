@@ -38,8 +38,8 @@ export class Database {
 
     try {
       await this.connection.execute(
-        `INSERT INTO agents (agent_id, name, capabilities, system, status, last_active, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (agent_id, name, capabilities, system, status, last_active, created_at, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           agent.agent_id,
           agent.name,
@@ -48,6 +48,7 @@ export class Database {
           agent.status,
           agent.last_active,
           agent.created_at,
+          agent.metadata ? JSON.stringify(agent.metadata) : null,
         ]
       );
     } catch (error) {
@@ -127,6 +128,7 @@ export class Database {
         status: row.status as 'active' | 'inactive',
         last_active: new Date(row.last_active),
         created_at: new Date(row.created_at),
+        metadata: row.metadata ? JSON.parse(row.metadata) : {},
       };
     } catch (error) {
       console.error('Failed to get agent:', error);
@@ -134,7 +136,7 @@ export class Database {
     }
   }
 
-  public async listAgents(system?: string, status?: string): Promise<Agent[]> {
+  public async listAgents(system?: string, status?: string, limit?: number): Promise<Agent[]> {
     if (!this.connection) {
       throw new Error('Database not initialized');
     }
@@ -153,13 +155,18 @@ export class Database {
         conditions.push('status = ?');
         values.push(status);
       }
+if (conditions.length > 0) {
+  query += ' WHERE ' + conditions.join(' AND ');
+}
 
-      if (conditions.length > 0) {
-        query += ' WHERE ' + conditions.join(' AND ');
-      }
+query += ' ORDER BY last_active DESC';
 
-      const result = await this.connection.execute(query, values);
+if (limit && limit > 0) {
+  query += ' LIMIT ?';
+  values.push(limit);
+}
 
+const result = await this.connection.execute(query, values);
       return result.rows.map((row: any) => ({
         agent_id: row.agent_id,
         name: row.name,
@@ -168,6 +175,7 @@ export class Database {
         status: row.status as 'active' | 'inactive',
         last_active: new Date(row.last_active),
         created_at: new Date(row.created_at),
+        metadata: row.metadata ? JSON.parse(row.metadata) : {},
       }));
     } catch (error) {
       console.error('Failed to list agents:', error);
@@ -195,7 +203,7 @@ export class Database {
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create message:', error);
       throw error;
@@ -294,7 +302,7 @@ export class Database {
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create task:', error);
       throw error;
@@ -459,7 +467,7 @@ export class Database {
         ]
       );
 
-      return result.insertId as number;
+      return Number(result.insertId);
     } catch (error) {
       console.error('Failed to create context:', error);
       throw error;
